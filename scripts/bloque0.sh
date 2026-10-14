@@ -36,7 +36,8 @@ auto_create_disabled() {
 
 # Arranca desde cero y espera a que kafka-init cree los topics (--wait no espera a que termine)
 docker compose down -v > /dev/null 2>&1
-if ! make up > /dev/null 2>&1 || ! docker compose wait kafka-init > /dev/null 2>&1; then
+if ! make up > /dev/null 2>&1 \
+  || [ "$(docker wait "$(docker compose ps -aq kafka-init)" 2> /dev/null)" != 0 ]; then
   echo "FALLO make up"
   exit 1
 fi

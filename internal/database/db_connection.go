@@ -23,5 +23,6 @@ func Connect(ctx context.Context, url string) (*pgxpool.Pool, error) {
 		return nil, fmt.Errorf("ping database: %w", err)
 	}
 
+	// Devuelve el pool listo para usar
 	return pool, nil
 }

@@ -29,7 +29,7 @@ type outboxRow struct {
 	payload   []byte
 }
 
-// RunProducer Lee todos los eventos que existen en la tabla outbox y los publica en batches.
+// RunProducer lee todos los eventos que existen en la tabla outbox y los publica en batches.
 func RunProducer(ctx context.Context, pool *pgxpool.Pool, brokers []string, topic string) error {
 	// Crea el cliente de Kafka (por defecto es idempotente y usa acks=all)
 	client, err := kgo.NewClient(
@@ -58,15 +58,16 @@ func RunProducer(ctx context.Context, pool *pgxpool.Pool, brokers []string, topi
 		}
 	}
 
+	// Devuelve nil al recibir la señal de parada
 	return nil
 }
 
-// publishBatch es un método interno usado por RunProducer para publicar un lote de la outbox en Kafka
-// borrar lo publicado, todo en una transacción.
+// publishBatch publica un lote de la outbox en Kafka y borra lo publicado, todo en una transacción.
 func publishBatch(ctx context.Context, pool *pgxpool.Pool, client *kgo.Client) (int, error) {
+	// Publica y borra el lote en una sola transacción
 	var published int
 	err := pgx.BeginFunc(ctx, pool, func(tx pgx.Tx) error {
-		// Prepara la query, con FOR UPDATE SKIP LOCKED omite las que tenga bloqueadas otro productor
+		// Bloquea hasta 100 filas, las más antiguas primero, saltando las que tenga otro productor
 		rows, err := tx.Query(ctx, `
 			SELECT id, event_type, payload->>'order_id', payload
 			FROM outbox
@@ -78,7 +79,7 @@ func publishBatch(ctx context.Context, pool *pgxpool.Pool, client *kgo.Client) (
 			return fmt.Errorf("select outbox: %w", err)
 		}
 
-		// Ejecuta el batch de queries
+		// Lee las filas del lote
 		batch, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (outboxRow, error) {
 			var r outboxRow
 			err := row.Scan(&r.id, &r.eventType, &r.orderID, &r.payload)
@@ -121,5 +122,6 @@ func publishBatch(ctx context.Context, pool *pgxpool.Pool, client *kgo.Client) (
 		return nil
 	})
 
+	// Devuelve cuántos eventos se han publicado y el error de la transacción
 	return published, err
 }

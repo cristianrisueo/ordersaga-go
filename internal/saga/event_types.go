@@ -20,7 +20,7 @@ const (
 	PaymentFailed    = "payment.failed"    // PaymentFailed lo publica payments cuando el cobro falla.
 )
 
-// Event es el evento de la saga; En una saga por coreografía todos los servicios publican y reciben el mismo tipo
+// Event es el evento de la saga; en una saga por coreografía todos los servicios publican y reciben el mismo tipo
 type Event struct {
 	EventType string    `json:"event_type"` // EventType es uno de los tipos de evento de la saga.
 	OrderID   uuid.UUID `json:"order_id"`   // OrderID identifica el pedido y es la clave del mensaje en Kafka.
@@ -45,6 +45,6 @@ func DecodeEvent(data []byte) (Event, error) {
 		return Event{}, errors.New("decode event: missing order_id")
 	}
 
-	// Devuelve el vento casteado si todo ha ido bien
+	// Devuelve el evento decodificado
 	return event, nil
 }

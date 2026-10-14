@@ -1,5 +1,16 @@
 # Entorno local de OrderSaga: Kafka y, en los bloques siguientes, cada servicio con su base de datos y sus procesos.
 
+# Configuración común de los procesos de orders: misma imagen y mismo entorno
+x-orders: &orders
+  build:
+    context: .
+    args:
+      SERVICE: orders
+  image: ordersaga-orders
+  environment:
+    DATABASE_URL: postgres://orders:orders@db-orders:5432/orders
+    KAFKA_BROKERS: kafka:9092
+
 services:
   #* Kafka
 
@@ -41,3 +52,52 @@ services:
     depends_on:
       kafka:
         condition: service_healthy
+
+  #* Orders
+
+  # Base de datos de orders: pedidos y outbox. Sin puerto en el host ni volumen con nombre
+  db-orders:
+    image: postgres:18
+    environment:
+      POSTGRES_USER: orders
+      POSTGRES_PASSWORD: orders
+      POSTGRES_DB: orders
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U orders -d orders"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # Migraciones de orders: aplica con goose las pendientes antes de que arranquen la API y el productor, y termina
+  orders-migrate:
+    <<: *orders
+    command: ["migrate"]
+    depends_on:
+      db-orders:
+        condition: service_healthy
+
+  # API de orders en el puerto 8001: arranca con las migraciones aplicadas y está sana cuando /health responde 200
+  orders-api:
+    <<: *orders
+    command: ["api"]
+    ports:
+      - "8001:8000"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8000/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    depends_on:
+      orders-migrate:
+        condition: service_completed_successfully
+
+  # Productor de orders: publica en Kafka los eventos de la outbox de orders. Misma imagen que la api de orders
+  orders-producer:
+    <<: *orders
+    command: ["producer"]
+    restart: unless-stopped
+    depends_on:
+      orders-migrate:
+        condition: service_completed_successfully
+      kafka-init:
+        condition: service_completed_successfully

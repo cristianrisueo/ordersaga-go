@@ -1,7 +1,10 @@
-.PHONY: help up down logs check test
+.PHONY: help up down logs check test migration
+
+# Versión de goose de go.mod, para que la CLI coincida con la librería
+GOOSE_VERSION = $(shell go list -m -f '{{.Version}}' github.com/pressly/goose/v3)
 
 help: ## Lista los objetivos disponibles
-	@grep -E '^[a-z]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "} {printf "%-8s %s\n", $$1, $$2}'
+	@grep -E '^[a-z]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "} {printf "%-10s %s\n", $$1, $$2}'
 
 up: ## Levanta los contenedores y espera a que estén operativos
 	docker compose up -d --build --wait
@@ -18,3 +21,10 @@ check: ## Formatea y pasa golangci-lint
 
 test: ## Tests con el detector de carreras
 	go test -race ./...
+
+migration: ## Crea una migración: make migration service=<servicio> name=<descripción>
+	@if [ -z "$(service)" ] || [ -z "$(name)" ]; then \
+		echo "uso: make migration service=<servicio> name=<descripción>"; \
+		exit 1; \
+	fi
+	go run github.com/pressly/goose/v3/cmd/goose@$(GOOSE_VERSION) -dir internal/migrations/$(service) -s create $(name) sql

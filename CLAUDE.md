@@ -13,23 +13,28 @@ simple que funcione bien, idiomático y con buenas prácticas de Go.
 
 ## Estructura
 
-- `cmd/<servicio>/main.go`: un binario por servicio con tres modos (`api`, `producer`, `consumer`), elegidos
-  por argumento. Es el único sitio donde se conectan las piezas. La configuración se lee aquí con `os.Getenv`.
-- `internal/database`: conexión a PostgreSQL. No sabe nada de eventos.
+- `cmd/<servicio>/main.go`: un binario por servicio con cuatro modos (`migrate`, `api`, `producer`, `consumer`),
+  elegidos por argumento. Es el único sitio donde se conectan las piezas. La configuración se lee aquí con
+  `os.Getenv`.
+- `internal/database`: conexión a PostgreSQL y `Migrate`, que aplica con goose las migraciones que reciba. No sabe
+  nada de los dominios ni de eventos.
+- `internal/migrations`: las migraciones SQL de goose, una subcarpeta por servicio, embebidas en el binario por
+  `migrations.go`.
 - `internal/saga`: cómo viajan los eventos: el tipo `Event`, el productor de la outbox y el consumidor.
 - `internal/<dominio>`: un paquete por servicio con siempre los mismos ficheros:
-  - `schema.sql`: sus tablas, incluida su `outbox`; la API lo aplica al arrancar.
   - `types.go`: tipos del dominio, estados y errores.
   - `repository.go`: solo SQL, incluido `insertOutbox`.
   - `service.go`: reglas de negocio y límite de cada transacción.
   - `http_routes.go`: las rutas y el middleware de cada una.
   - `http_handler.go`: la puerta HTTP: valida, llama al servicio y responde JSON.
   - `events_handler.go`: la puerta de Kafka: qué evento va a qué función del servicio.
-- Los dominios importan `saga` y `database`; ni `saga` ni `database` importan nada interno.
+- Los dominios importan `saga` y `database`; `cmd` importa además `migrations`; ni `saga`, ni `database`, ni
+  `migrations` importan nada interno.
 
 ## Dependencias
 
-Solo `pgx/v5`, `franz-go`, `google/uuid` y, en los tests, `testcontainers-go`. Ninguna otra sin preguntar.
+Solo `pgx/v5`, `franz-go`, `google/uuid`, `pressly/goose/v3` y, en los tests, `testcontainers-go`. Ninguna otra
+sin preguntar.
 
 ## Convenciones de Go
 
@@ -50,9 +55,18 @@ Solo `pgx/v5`, `franz-go`, `google/uuid` y, en los tests, `testcontainers-go`. N
 - SQL a mano con placeholders (`$1`), nunca concatenando. Columnas explícitas, nunca `SELECT *`.
 - Idempotencia por clave de negocio: `INSERT ... ON CONFLICT DO NOTHING RETURNING` y `UPDATE` condicionales
   sobre el estado. Nunca comprobar si algo existe antes de insertarlo.
-- Contrato de la tabla `outbox` (igual en los tres servicios, la lee `saga.RunProducer`):
-  `id UUID PRIMARY KEY DEFAULT uuidv7()`, `event_type TEXT NOT NULL`, `payload JSONB NOT NULL`,
-  `created_at TIMESTAMPTZ NOT NULL DEFAULT now()`.
+- Contrato de la tabla `outbox` (igual en los tres servicios, la lee `saga.RunProducer` y la crea la primera
+  migración de cada servicio): `id UUID PRIMARY KEY DEFAULT uuidv7()`, `event_type TEXT NOT NULL`,
+  `payload JSONB NOT NULL`, `created_at TIMESTAMPTZ NOT NULL DEFAULT now()`.
+
+## Migraciones
+
+- Cada servicio tiene sus migraciones en `internal/migrations/<servicio>/`, y se crean siempre con
+  `make migration service=<servicio> name=<descripción>`.
+- Cada migración tiene su `Up` y su `Down`.
+- Una migración que ya está en `main` nunca se edita, se mueve ni se borra; los cambios van en una migración
+  nueva.
+- Las aplica el modo `migrate` del binario, que compose lanza antes de la API. La API nunca migra.
 
 ## Comentarios y estilo
 
@@ -77,7 +91,7 @@ Solo `pgx/v5`, `franz-go`, `google/uuid` y, en los tests, `testcontainers-go`. N
 ## Tests
 
 - Solo `testing` y `httptest`. Sin mocks, fakes ni librerías de aserciones.
-- PostgreSQL real con testcontainers-go, aplicando el `schema.sql` del dominio.
+- PostgreSQL real con testcontainers-go, preparada con `database.Migrate` y las migraciones del servicio.
 - Nombres `Test<Unidad>_<Método>_<Caso>`; tablas de casos con `t.Run` cuando haya varios.
 
 ## Compatibilidad con los scripts de prueba
@@ -94,3 +108,4 @@ nombre del servicio).
 - `make logs`: sigue los logs.
 - `make check`: formatea y pasa golangci-lint.
 - `make test`: tests con el detector de carreras.
+- `make migration service=<servicio> name=<descripción>`: crea una migración nueva del servicio.

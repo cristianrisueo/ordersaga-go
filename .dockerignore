@@ -1,0 +1,13 @@
+# Para compilar solo hacen falta go.mod, go.sum, cmd/ e internal/
+.git
+.gitignore
+.dockerignore
+.golangci.yml
+.env
+.DS_Store
+Dockerfile
+compose.yml
+Makefile
+scripts
+bin
+*.md
