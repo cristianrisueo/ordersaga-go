@@ -1,4 +1,5 @@
 // Consumidor de eventos de Kafka. Lee todo lo publicado en su topic suscrito y redirige al handler de cada servicio
+
 package saga
 
 import (

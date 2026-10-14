@@ -1,4 +1,5 @@
 // Define el evento de la saga y el método para decodificar eventos
+
 package saga
 
 import (

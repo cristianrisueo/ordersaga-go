@@ -1,4 +1,5 @@
 // Abre la conexión con la base de datos.
+
 package database
 
 import (

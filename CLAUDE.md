@@ -25,7 +25,7 @@ simple que funcione bien, idiomático y con buenas prácticas de Go.
   - `http_routes.go`: las rutas y el middleware de cada una.
   - `http_handler.go`: la puerta HTTP: valida, llama al servicio y responde JSON.
   - `events_handler.go`: la puerta de Kafka: qué evento va a qué función del servicio.
-- Los dominios importan `saga` y `database`; `saga` importa `database`; `database` no importa nada interno.
+- Los dominios importan `saga` y `database`; ni `saga` ni `database` importan nada interno.
 
 ## Dependencias
 
@@ -54,12 +54,25 @@ Solo `pgx/v5`, `franz-go`, `google/uuid` y, en los tests, `testcontainers-go`. N
   `id UUID PRIMARY KEY DEFAULT uuidv7()`, `event_type TEXT NOT NULL`, `payload JSONB NOT NULL`,
   `created_at TIMESTAMPTZ NOT NULL DEFAULT now()`.
 
-## Comentarios
+## Comentarios y estilo
 
-- En español.
-- El código va en bloques separados por una línea en blanco, con un comentario de una línea encima de cada
-  bloque que resume lo que hace. Sin comentarios dentro de las ramas de un `if`/`else`.
-- Comentarios de documentación cortos, de una línea, en todo identificador exportado.
+- Comentarios en español; mensajes de error y de log en inglés, en minúsculas y sin punto final
+  (`fmt.Errorf("create pool: %w", err)`, `slog.Info("event published", "order_id", id)`).
+- Cada fichero empieza con una línea que dice qué hace, seguida de una línea en blanco y después `package`.
+- Comentarios de documentación de una línea, empezando por el nombre del identificador y terminados en punto
+  (`// Connect crea el pool de conexiones y comprueba que la base de datos responde.`).
+- Constantes y campos de struct exportados: comentario al final de su línea (`// OrderID identifica el pedido.`).
+  Los no exportados se documentan con un comentario encima del bloque.
+- Dentro de una función, el código va en bloques separados por una línea en blanco, cada uno con un comentario
+  de una línea encima que resume el bloque, sin punto final. El `return` final también lleva el suyo
+  (`// Devuelve el pool listo para usar`).
+- Sin comentarios dentro de las ramas de un `if`/`else` ni en un `defer` de cierre.
+- Si la llamada ocupa una línea, su `if err != nil` va pegado debajo. Si ocupa varias, se deja una línea en
+  blanco entre la llamada y su `if err != nil`.
+- El `defer` de cierre va en su propio bloque, sin comentario, justo después de comprobar el error de lo que
+  cierra.
+- Para publicar el evento siguiente se copia el recibido y se cambia el tipo:
+  `reserved := ev` y `reserved.EventType = saga.StockReserved`.
 
 ## Tests
 

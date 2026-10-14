@@ -1,4 +1,5 @@
 // Productor de Kafka. Lee eventos de la tabla outbox de cada servicio, los publica y elimina, limpiando la tabla
+
 package saga
 
 import (
