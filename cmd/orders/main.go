@@ -7,28 +7,21 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"net/http"
 	"os"
 	"os/signal"
 	"strings"
 	"syscall"
-	"time"
 
-	"github.com/cristianrisueo/ordersaga-go/internal/database"
-	"github.com/cristianrisueo/ordersaga-go/internal/migrations"
-	"github.com/cristianrisueo/ordersaga-go/internal/orders"
+	"github.com/cristianrisueo/ordersaga-go/internal/platform/database"
+	"github.com/cristianrisueo/ordersaga-go/internal/platform/httpserver"
 	"github.com/cristianrisueo/ordersaga-go/internal/saga"
+	"github.com/cristianrisueo/ordersaga-go/internal/services/orders"
+	"github.com/cristianrisueo/ordersaga-go/migrations"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // apiAddr es la dirección en la que escucha la API.
-// readHeaderTimeout es el tiempo máximo para leer las cabeceras de una petición.
-// shutdownTimeout es el tiempo que se espera a las peticiones en curso al parar.
-const (
-	apiAddr           = ":8000"
-	readHeaderTimeout = 5 * time.Second
-	shutdownTimeout   = 10 * time.Second
-)
+const apiAddr = ":8000"
 
 // main ejecuta el servicio y sale con código 1 si falla.
 func main() {
@@ -96,39 +89,6 @@ func runAPI(ctx context.Context, pool *pgxpool.Pool) error {
 	service := orders.NewService(pool, repo)
 	handler := orders.NewHandler(service)
 
-	// Arranca el servidor en una goroutine que devuelve su error por un canal
-	server := &http.Server{
-		Addr:              apiAddr,
-		Handler:           orders.Routes(handler),
-		ReadHeaderTimeout: readHeaderTimeout,
-	}
-
-	serveErr := make(chan error, 1)
-	go func() {
-		serveErr <- server.ListenAndServe()
-	}()
-
-	slog.Info("api listening", "addr", apiAddr)
-
-	// Espera a que el servidor falle o a la señal de parada
-	select {
-	case err := <-serveErr:
-		if errors.Is(err, http.ErrServerClosed) {
-			return nil
-		}
-		return fmt.Errorf("serve http: %w", err)
-	case <-ctx.Done():
-	}
-
-	// Con la señal, deja de aceptar peticiones y espera a las que están en curso
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
-
-	defer cancel()
-
-	if err := server.Shutdown(shutdownCtx); err != nil {
-		return fmt.Errorf("shutdown http: %w", err)
-	}
-
-	// Devuelve nil tras un apagado limpio
-	return nil
+	// Sirve la API hasta la señal de parada
+	return httpserver.Run(ctx, apiAddr, orders.Routes(handler))
 }

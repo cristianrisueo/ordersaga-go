@@ -16,19 +16,27 @@ simple que funcione bien, idiomático y con buenas prácticas de Go.
 - `cmd/<servicio>/main.go`: un binario por servicio con cuatro modos (`migrate`, `api`, `producer`, `consumer`),
   elegidos por argumento. Es el único sitio donde se conectan las piezas. La configuración se lee aquí con
   `os.Getenv`.
-- `internal/database`: conexión a PostgreSQL y `Migrate`, que aplica con goose las migraciones que reciba. No sabe
-  nada de los dominios ni de eventos.
-- `internal/migrations`: las migraciones SQL de goose, una subcarpeta por servicio, embebidas en el binario por
-  `migrations.go`.
-- `internal/saga`: cómo viajan los eventos: el tipo `Event`, el productor de la outbox y el consumidor.
-- `internal/<dominio>`: un paquete por servicio con siempre los mismos ficheros:
-  - `types.go`: tipos del dominio, estados y errores.
-  - `repository.go`: solo SQL, incluido `insertOutbox`.
-  - `service.go`: reglas de negocio y límite de cada transacción.
-  - `http_routes.go`: las rutas y el middleware de cada una.
-  - `http_handler.go`: la puerta HTTP: valida, llama al servicio y responde JSON.
-  - `events_handler.go`: la puerta de Kafka: qué evento va a qué función del servicio.
-- Los dominios importan `saga` y `database`; `cmd` importa además `migrations`; ni `saga`, ni `database`, ni
+- `migrations/<servicio>/`: las migraciones SQL de goose, una subcarpeta por servicio, embebidas en el binario por
+  `migrations/migrations.go`.
+- `internal/` tiene tres piezas:
+  - `internal/platform`: infraestructura técnica compartida, sin nada de los servicios ni de eventos.
+    - `internal/platform/database`: conexión a PostgreSQL y `Migrate`, que aplica con goose las migraciones que
+      reciba.
+    - `internal/platform/httpserver`: `Run`, que sirve un `http.Handler` hasta la señal de parada con apagado
+      ordenado.
+  - `internal/saga`: el contrato de eventos y cómo viajan: el tipo `Event`, el productor de la outbox y el
+    consumidor.
+  - `internal/services/<servicio>`: un paquete por microservicio, igual que `cmd/`, con siempre los mismos
+    ficheros:
+    - `types.go`: tipos del dominio, estados y errores.
+    - `repository.go`: solo SQL, incluido `insertOutbox`.
+    - `service.go`: reglas de negocio y límite de cada transacción.
+    - `http_routes.go`: las rutas y el middleware de cada una.
+    - `http_handler.go`: la puerta HTTP: valida, llama al servicio y responde JSON.
+    - `events_routes.go`: la puerta de Kafka: `Topics`, los topics que escucha el servicio, y
+      `EventRoutes(service)`, que devuelve la función que envía cada evento a su función del servicio. Los eventos
+      que no le interesan se ignoran.
+- Los servicios importan `saga` y `platform`; `cmd` importa además `migrations`; ni `saga`, ni `platform`, ni
   `migrations` importan nada interno.
 
 ## Dependencias
@@ -61,7 +69,7 @@ sin preguntar.
 
 ## Migraciones
 
-- Cada servicio tiene sus migraciones en `internal/migrations/<servicio>/`, y se crean siempre con
+- Cada servicio tiene sus migraciones en `migrations/<servicio>/`, y se crean siempre con
   `make migration service=<servicio> name=<descripción>`.
 - Cada migración tiene su `Up` y su `Down`.
 - Una migración que ya está en `main` nunca se edita, se mueve ni se borra; los cambios van en una migración
@@ -82,7 +90,8 @@ sin preguntar.
   (`// Devuelve el pool listo para usar`).
 - Sin comentarios dentro de las ramas de un `if`/`else` ni en un `defer` de cierre.
 - Si la llamada ocupa una línea, su `if err != nil` va pegado debajo. Si ocupa varias, se deja una línea en
-  blanco entre la llamada y su `if err != nil`.
+  blanco entre la llamada y su `if err != nil`. Esa línea en blanco no abre un bloque nuevo: el comentario del
+  bloque cubre la llamada y su comprobación.
 - El `defer` de cierre va en su propio bloque, sin comentario, justo después de comprobar el error de lo que
   cierra.
 - Para publicar el evento siguiente se copia el recibido y se cambia el tipo:

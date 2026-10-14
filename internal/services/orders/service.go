@@ -20,6 +20,7 @@ type Service struct {
 
 // NewService crea el servicio con el pool, para abrir transacciones, y el repositorio.
 func NewService(pool *pgxpool.Pool, repo *Repository) *Service {
+	// Devuelve el servicio listo para usar
 	return &Service{pool: pool, repo: repo}
 }
 
@@ -68,5 +69,6 @@ func (s *Service) CreateOrder(ctx context.Context, in CreateOrderInput) (Order, 
 
 // GetOrder devuelve un pedido por su id, o ErrNotFound si no existe.
 func (s *Service) GetOrder(ctx context.Context, id uuid.UUID) (Order, error) {
+	// Devuelve el pedido leído del repositorio
 	return s.repo.getOrder(ctx, id)
 }

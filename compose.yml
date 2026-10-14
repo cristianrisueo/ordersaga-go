@@ -11,6 +11,17 @@ x-orders: &orders
     DATABASE_URL: postgres://orders:orders@db-orders:5432/orders
     KAFKA_BROKERS: kafka:9092
 
+# Configuración común de los procesos de stock: misma imagen y mismo entorno
+x-stock: &stock
+  build:
+    context: .
+    args:
+      SERVICE: stock
+  image: ordersaga-stock
+  environment:
+    DATABASE_URL: postgres://stock:stock@db-stock:5432/stock
+    KAFKA_BROKERS: kafka:9092
+
 services:
   #* Kafka
 
@@ -98,6 +109,66 @@ services:
     restart: unless-stopped
     depends_on:
       orders-migrate:
+        condition: service_completed_successfully
+      kafka-init:
+        condition: service_completed_successfully
+
+  #* Stock
+
+  # Base de datos de stock: productos, reservas y outbox. Sin puerto en el host ni volumen con nombre
+  db-stock:
+    image: postgres:18
+    environment:
+      POSTGRES_USER: stock
+      POSTGRES_PASSWORD: stock
+      POSTGRES_DB: stock
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U stock -d stock"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # Migraciones de stock: crea las tablas y carga el catálogo con goose antes que los demás procesos, y termina
+  stock-migrate:
+    <<: *stock
+    command: ["migrate"]
+    depends_on:
+      db-stock:
+        condition: service_healthy
+
+  # API de stock en el puerto 8002: arranca con las migraciones aplicadas y está sana cuando /health responde 200
+  stock-api:
+    <<: *stock
+    command: ["api"]
+    ports:
+      - "8002:8000"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8000/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    depends_on:
+      stock-migrate:
+        condition: service_completed_successfully
+
+  # Productor de stock: publica en Kafka los eventos de la outbox de stock. Misma imagen que la api de stock
+  stock-producer:
+    <<: *stock
+    command: ["producer"]
+    restart: unless-stopped
+    depends_on:
+      stock-migrate:
+        condition: service_completed_successfully
+      kafka-init:
+        condition: service_completed_successfully
+
+  # Consumidor de stock: lee los eventos de orders y reserva unidades. Si falla, compose lo reinicia
+  stock-consumer:
+    <<: *stock
+    command: ["consumer"]
+    restart: unless-stopped
+    depends_on:
+      stock-migrate:
         condition: service_completed_successfully
       kafka-init:
         condition: service_completed_successfully

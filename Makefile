@@ -27,4 +27,4 @@ migration: ## Crea una migración: make migration service=<servicio> name=<descr
 		echo "uso: make migration service=<servicio> name=<descripción>"; \
 		exit 1; \
 	fi
-	go run github.com/pressly/goose/v3/cmd/goose@$(GOOSE_VERSION) -dir internal/migrations/$(service) -s create $(name) sql
+	go run github.com/pressly/goose/v3/cmd/goose@$(GOOSE_VERSION) -dir migrations/$(service) -s create $(name) sql

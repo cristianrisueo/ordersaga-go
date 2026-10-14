@@ -1,4 +1,4 @@
-# Para compilar solo hacen falta go.mod, go.sum, cmd/ e internal/
+# Para compilar solo hacen falta go.mod, go.sum, cmd/, internal/ y migrations/
 .git
 .gitignore
 .dockerignore
