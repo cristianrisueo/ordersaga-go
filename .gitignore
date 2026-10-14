@@ -1,0 +1,14 @@
+# Binarios compilados
+/bin/
+*.exe
+*.test
+
+# Cobertura
+*.out
+coverage.*
+
+# Entorno local
+.env
+
+# macOS
+.DS_Store
