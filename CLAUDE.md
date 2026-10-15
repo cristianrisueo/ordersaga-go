@@ -23,7 +23,8 @@ simple que funcione bien, idiomático y con buenas prácticas de Go.
     - `internal/platform/database`: conexión a PostgreSQL y `Migrate`, que aplica con goose las migraciones que
       reciba.
     - `internal/platform/httpserver`: `Run`, que sirve un `http.Handler` hasta la señal de parada con apagado
-      ordenado.
+      ordenado, y `WriteJSON` y `WriteError`, el formato de respuesta común de las APIs (errores como
+      `{"detail": "..."}`).
   - `internal/saga`: el contrato de eventos y cómo viajan: el tipo `Event`, el productor de la outbox y el
     consumidor.
   - `internal/services/<servicio>`: un paquete por microservicio, igual que `cmd/`, con siempre los mismos

@@ -13,7 +13,6 @@ var Topics = []string{"orders"}
 
 // EventRoutes devuelve la función que envía cada evento a su función del servicio e ignora el resto.
 func EventRoutes(s *Service) func(context.Context, saga.Event) error {
-	// Devuelve la función que elige según el tipo de evento
 	return func(ctx context.Context, event saga.Event) error {
 		// Envía cada evento a su función del servicio; los que no le interesan se ignoran
 		switch event.EventType {

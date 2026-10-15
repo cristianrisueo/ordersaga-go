@@ -28,7 +28,14 @@ func NewRepository(pool *pgxpool.Pool) *Repository {
 func (r *Repository) getProduct(ctx context.Context, id string) (Product, error) {
 	// Lee el producto
 	var product Product
-	err := r.pool.QueryRow(ctx, `SELECT id, available FROM products WHERE id = $1`, id).Scan(&product.ID, &product.Available)
+
+	err := r.pool.QueryRow(ctx, `
+		SELECT id, available
+		FROM products
+		WHERE id = $1`, id,
+	).Scan(&product.ID, &product.Available)
+
+	// Devuelve errores en caso de que el producto no exista o se de otro
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Product{}, ErrNotFound
 	}
@@ -43,49 +50,39 @@ func (r *Repository) getProduct(ctx context.Context, id string) (Product, error)
 
 // insertReservation inserta la reserva y devuelve false si ya existía, es decir, si el evento es repetido.
 func (r *Repository) insertReservation(ctx context.Context, tx pgx.Tx, reservation Reservation) (bool, error) {
-	// Inserta la reserva; si ya existía no devuelve ninguna fila
-	var orderID uuid.UUID
-	err := tx.QueryRow(ctx, `
+	// Inserta la reserva; si ya existía no afecta a ninguna fila
+	tag, err := tx.Exec(ctx, `
 		INSERT INTO reservations (order_id, product_id, quantity, status)
 		VALUES ($1, $2, $3, $4)
-		ON CONFLICT (order_id) DO NOTHING
-		RETURNING order_id`,
+		ON CONFLICT (order_id) DO NOTHING`,
 		reservation.OrderID, reservation.ProductID, reservation.Quantity, reservation.Status,
-	).Scan(&orderID)
+	)
 
-	if errors.Is(err, pgx.ErrNoRows) {
-		return false, nil
-	}
-
+	// Devuelve error si se produce
 	if err != nil {
 		return false, fmt.Errorf("insert reservation: %w", err)
 	}
 
-	// Devuelve true con la reserva insertada
-	return true, nil
+	// Devuelve true si la reserva es nueva o false si el evento es repetido
+	return tag.RowsAffected() == 1, nil
 }
 
 // reserveUnits descuenta las unidades y devuelve false si no hay suficientes o el producto no existe.
 func (r *Repository) reserveUnits(ctx context.Context, tx pgx.Tx, productID string, quantity int) (bool, error) {
-	// Descuenta las unidades solo si hay suficientes; si no, no devuelve ninguna fila
-	var id string
-	err := tx.QueryRow(ctx, `
+	// Realiza el update
+	tag, err := tx.Exec(ctx, `
 		UPDATE products SET available = available - $2
-		WHERE id = $1 AND available >= $2
-		RETURNING id`,
+		WHERE id = $1 AND available >= $2`,
 		productID, quantity,
-	).Scan(&id)
+	)
 
-	if errors.Is(err, pgx.ErrNoRows) {
-		return false, nil
-	}
-
+	// Devuelve error si existe
 	if err != nil {
 		return false, fmt.Errorf("reserve units: %w", err)
 	}
 
-	// Devuelve true con las unidades descontadas
-	return true, nil
+	// Devuelve true si la ejecución ha afectado a una fila
+	return tag.RowsAffected() == 1, nil
 }
 
 // markReservationFailed pasa la reserva del pedido a failed.
@@ -96,18 +93,18 @@ func (r *Repository) markReservationFailed(ctx context.Context, tx pgx.Tx, order
 		return fmt.Errorf("mark reservation failed: %w", err)
 	}
 
-	// Devuelve nil con la reserva en failed
+	// Devuelve nil si la reserva se ha cambiado correctamente
 	return nil
 }
 
-// insertOutbox guarda el evento en la outbox para que lo publique el productor.
+// insertOutbox guarda el evento en la tabla outbox para que lo publique el productor.
 func (r *Repository) insertOutbox(ctx context.Context, tx pgx.Tx, event saga.Event) error {
-	// Inserta el tipo y el evento entero como payload (pgx lo serializa a JSON en la columna JSONB)
+	// Inserta el tipo y el evento entero como payload
 	_, err := tx.Exec(ctx, `INSERT INTO outbox (event_type, payload) VALUES ($1, $2)`, event.EventType, event)
 	if err != nil {
 		return fmt.Errorf("insert outbox: %w", err)
 	}
 
-	// Devuelve nil con el evento guardado
+	// Devuelve nil si todo ha ido correctamente
 	return nil
 }
