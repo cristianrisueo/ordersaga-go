@@ -9,15 +9,17 @@ import (
 )
 
 // Topics son los topics de Kafka que escucha orders.
-var Topics = []string{"payments"}
+var Topics = []string{"stock", "payments"}
 
 // EventRoutes devuelve la función que envía cada evento a su función del servicio e ignora el resto.
 func EventRoutes(s *Service) func(context.Context, saga.Event) error {
 	return func(ctx context.Context, event saga.Event) error {
-		// Envía cada evento a su función del servicio; los que no le interesan se ignoran
+		// Cancela solo cuando stock ha terminado (stock.failed o stock.released): payment.failed y el resto se ignoran
 		switch event.EventType {
 		case saga.PaymentCompleted:
 			return s.ConfirmOrder(ctx, event)
+		case saga.StockFailed, saga.StockReleased:
+			return s.CancelOrder(ctx, event)
 		default:
 			return nil
 		}

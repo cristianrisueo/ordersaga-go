@@ -97,6 +97,41 @@ func (r *Repository) markReservationFailed(ctx context.Context, tx pgx.Tx, order
 	return nil
 }
 
+// releaseReservation pasa la reserva de reserved a released y devuelve false si no había nada que liberar.
+func (r *Repository) releaseReservation(ctx context.Context, tx pgx.Tx, orderID uuid.UUID) (Reservation, bool, error) {
+	// Libera la reserva solo si sigue en reserved y lee su producto y su cantidad para devolver las unidades
+	reservation := Reservation{OrderID: orderID, Status: StatusReleased}
+	err := tx.QueryRow(ctx, `
+		UPDATE reservations SET status = $2
+		WHERE order_id = $1 AND status = $3
+		RETURNING product_id, quantity`,
+		orderID, StatusReleased, StatusReserved,
+	).Scan(&reservation.ProductID, &reservation.Quantity)
+
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Reservation{}, false, nil
+	}
+
+	if err != nil {
+		return Reservation{}, false, fmt.Errorf("release reservation: %w", err)
+	}
+
+	// Devuelve la reserva liberada
+	return reservation, true, nil
+}
+
+// returnUnits devuelve al producto las unidades de una reserva liberada.
+func (r *Repository) returnUnits(ctx context.Context, tx pgx.Tx, productID string, quantity int) error {
+	// Suma las unidades al producto
+	_, err := tx.Exec(ctx, `UPDATE products SET available = available + $2 WHERE id = $1`, productID, quantity)
+	if err != nil {
+		return fmt.Errorf("return units: %w", err)
+	}
+
+	// Devuelve nil con las unidades devueltas
+	return nil
+}
+
 // insertOutbox guarda el evento en la tabla outbox para que lo publique el productor.
 func (r *Repository) insertOutbox(ctx context.Context, tx pgx.Tx, event saga.Event) error {
 	// Inserta el tipo y el evento entero como payload

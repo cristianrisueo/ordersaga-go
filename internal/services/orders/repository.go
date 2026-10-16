@@ -67,7 +67,7 @@ func (r *Repository) getOrder(ctx context.Context, id uuid.UUID) (Order, error) 
 // updateStatusIfPending cambia el estado del pedido solo si sigue en pending; un evento repetido no toca ninguna fila.
 func (r *Repository) updateStatusIfPending(ctx context.Context, id uuid.UUID, status string) error {
 	// Cambia el estado solo si el pedido sigue en pending
-	_, err := r.pool.Exec(ctx, `UPDATE orders SET status = $2 WHERE id = $1 AND status = 'pending'`, id, status)
+	_, err := r.pool.Exec(ctx, `UPDATE orders SET status = $2 WHERE id = $1 AND status = $3`, id, status, StatusPending)
 	if err != nil {
 		return fmt.Errorf("update order status: %w", err)
 	}

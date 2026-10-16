@@ -1,4 +1,4 @@
-// Reglas de negocio de stock: leer un producto y reservar las unidades de un pedido junto a su evento
+// Reglas de negocio de stock: leer un producto, y reservar o liberar las unidades de un pedido junto a su evento
 
 package stock
 
@@ -81,5 +81,39 @@ func (s *Service) ReserveStock(ctx context.Context, event saga.Event) error {
 	}
 
 	// Devuelve nil con la reserva y su evento guardados
+	return nil
+}
+
+// ReleaseStock libera las unidades reservadas del pedido y escribe stock.released en la misma transacción.
+func (s *Service) ReleaseStock(ctx context.Context, event saga.Event) error {
+	// Libera la reserva, devuelve las unidades y guarda el evento en outbox en la misma transacción
+	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+		// Libera la reserva; si no había nada que liberar (evento repetido o sin reserva) no se hace nada más
+		reservation, released, err := s.repo.releaseReservation(ctx, tx, event.OrderID)
+		if err != nil {
+			return err
+		}
+		if !released {
+			return nil
+		}
+
+		// Devuelve al producto las unidades de la reserva, nunca las del evento
+		if err := s.repo.returnUnits(ctx, tx, reservation.ProductID, reservation.Quantity); err != nil {
+			return err
+		}
+
+		// Crea una copia del evento con el tipo stock.released e inserta el nuevo evento en outbox
+		next := event
+		next.EventType = saga.StockReleased
+
+		return s.repo.insertOutbox(ctx, tx, next)
+	})
+
+	// Devuelve el error si lo ha habido
+	if err != nil {
+		return fmt.Errorf("release stock: %w", err)
+	}
+
+	// Devuelve nil con la reserva liberada y su evento guardado
 	return nil
 }

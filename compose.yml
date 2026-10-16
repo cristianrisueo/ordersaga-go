@@ -125,7 +125,7 @@ services:
       kafka-init:
         condition: service_completed_successfully
 
-  # Consumidor de orders: lee los eventos de payments y confirma pedidos. Si falla, compose lo reinicia
+  # Consumidor de orders: lee payments para confirmar pedidos y stock para cancelarlos. Si falla, compose lo reinicia
   orders-consumer:
     <<: *orders
     command: ["consumer"]
@@ -185,7 +185,7 @@ services:
       kafka-init:
         condition: service_completed_successfully
 
-  # Consumidor de stock: lee los eventos de orders y reserva unidades. Si falla, compose lo reinicia
+  # Consumidor de stock: lee orders para reservar unidades y payments para liberarlas. Si falla, compose lo reinicia
   stock-consumer:
     <<: *stock
     command: ["consumer"]

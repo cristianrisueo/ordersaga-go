@@ -9,7 +9,7 @@ import (
 )
 
 // Topics son los topics de Kafka que escucha stock.
-var Topics = []string{"orders"}
+var Topics = []string{"orders", "payments"}
 
 // EventRoutes devuelve la función que envía cada evento a su función del servicio e ignora el resto.
 func EventRoutes(s *Service) func(context.Context, saga.Event) error {
@@ -18,6 +18,8 @@ func EventRoutes(s *Service) func(context.Context, saga.Event) error {
 		switch event.EventType {
 		case saga.OrderCreated:
 			return s.ReserveStock(ctx, event)
+		case saga.PaymentFailed:
+			return s.ReleaseStock(ctx, event)
 		default:
 			return nil
 		}

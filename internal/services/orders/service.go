@@ -1,4 +1,4 @@
-// Reglas de negocio de orders: crear un pedido junto a su evento, leer un pedido y confirmarlo
+// Reglas de negocio de orders: crear un pedido junto a su evento, leer un pedido, y confirmarlo o cancelarlo
 
 package orders
 
@@ -81,5 +81,16 @@ func (s *Service) ConfirmOrder(ctx context.Context, event saga.Event) error {
 	}
 
 	// Devuelve nil con el pedido confirmado o ya en otro estado
+	return nil
+}
+
+// CancelOrder pasa el pedido a cancelled si sigue en pending; no publica ningún evento porque nadie lo escucharía.
+func (s *Service) CancelOrder(ctx context.Context, event saga.Event) error {
+	// Cancela el pedido con un UPDATE condicional, que ya es atómico y no necesita transacción
+	if err := s.repo.updateStatusIfPending(ctx, event.OrderID, StatusCancelled); err != nil {
+		return fmt.Errorf("cancel order: %w", err)
+	}
+
+	// Devuelve nil con el pedido cancelado o ya en otro estado
 	return nil
 }
