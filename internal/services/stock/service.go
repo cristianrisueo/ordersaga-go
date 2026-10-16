@@ -46,7 +46,6 @@ func (s *Service) ReserveStock(ctx context.Context, event saga.Event) error {
 		if err != nil {
 			return err
 		}
-
 		if !inserted {
 			return nil
 		}
@@ -81,5 +80,6 @@ func (s *Service) ReserveStock(ctx context.Context, event saga.Event) error {
 		return fmt.Errorf("reserve stock: %w", err)
 	}
 
+	// Devuelve nil con la reserva y su evento guardados
 	return nil
 }

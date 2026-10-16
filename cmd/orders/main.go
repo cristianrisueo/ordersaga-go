@@ -1,4 +1,4 @@
-// Binario del servicio orders: aplica las migraciones, arranca la API o el productor de la outbox según el modo
+// Binario del servicio orders: aplica las migraciones, arranca la API, el productor o el consumidor según el modo
 
 package main
 
@@ -39,7 +39,7 @@ func run() error {
 
 	// Lee el modo de despliegue del primer argumento
 	if len(os.Args) < 2 {
-		return errors.New("missing mode: api, producer or migrate")
+		return errors.New("missing mode: migrate, api, producer or consumer")
 	}
 	mode := os.Args[1]
 
@@ -69,7 +69,7 @@ func run() error {
 
 	defer pool.Close()
 
-	// Arranca el modo elegido (migrate, api o producer)
+	// Arranca el modo elegido (migrate, api, producer o consumer)
 	switch mode {
 	case "migrate":
 		return database.Migrate(ctx, pool, migrations.Orders, "orders")
@@ -77,6 +77,8 @@ func run() error {
 		return runAPI(ctx, pool)
 	case "producer":
 		return saga.RunProducer(ctx, pool, brokers, "orders")
+	case "consumer":
+		return runConsumer(ctx, pool, brokers)
 	default:
 		return fmt.Errorf("unknown mode %q", mode)
 	}
@@ -91,4 +93,14 @@ func runAPI(ctx context.Context, pool *pgxpool.Pool) error {
 
 	// Sirve la API hasta la señal de parada
 	return httpserver.Run(ctx, apiAddr, orders.Routes(handler))
+}
+
+// runConsumer procesa los eventos de los topics de orders hasta la señal de parada.
+func runConsumer(ctx context.Context, pool *pgxpool.Pool, brokers []string) error {
+	// Crea el repositorio y el servicio
+	repo := orders.NewRepository(pool)
+	service := orders.NewService(pool, repo)
+
+	// Consume los eventos con el grupo orders y los envía a su función del servicio
+	return saga.RunConsumer(ctx, brokers, "orders", orders.Topics, orders.EventRoutes(service))
 }

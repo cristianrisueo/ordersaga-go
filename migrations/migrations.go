@@ -13,3 +13,8 @@ var Orders embed.FS
 //
 //go:embed stock/*.sql
 var Stock embed.FS
+
+// Payments contiene las migraciones de la base de datos de payments.
+//
+//go:embed payments/*.sql
+var Payments embed.FS

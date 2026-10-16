@@ -64,6 +64,18 @@ func (r *Repository) getOrder(ctx context.Context, id uuid.UUID) (Order, error) 
 	return order, nil
 }
 
+// updateStatusIfPending cambia el estado del pedido solo si sigue en pending; un evento repetido no toca ninguna fila.
+func (r *Repository) updateStatusIfPending(ctx context.Context, id uuid.UUID, status string) error {
+	// Cambia el estado solo si el pedido sigue en pending
+	_, err := r.pool.Exec(ctx, `UPDATE orders SET status = $2 WHERE id = $1 AND status = 'pending'`, id, status)
+	if err != nil {
+		return fmt.Errorf("update order status: %w", err)
+	}
+
+	// Devuelve nil tanto si ha cambiado el estado como si el pedido ya no estaba en pending
+	return nil
+}
+
 // insertOutbox guarda el evento en la outbox para que lo publique el productor.
 func (r *Repository) insertOutbox(ctx context.Context, tx pgx.Tx, event saga.Event) error {
 	// Inserta el tipo y el evento entero como payload (pgx lo serializa a JSON en la columna JSONB)

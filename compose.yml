@@ -22,6 +22,18 @@ x-stock: &stock
     DATABASE_URL: postgres://stock:stock@db-stock:5432/stock
     KAFKA_BROKERS: kafka:9092
 
+# Configuración común de los procesos de payments: misma imagen y mismo entorno, con el importe máximo que se cobra
+x-payments: &payments
+  build:
+    context: .
+    args:
+      SERVICE: payments
+  image: ordersaga-payments
+  environment:
+    DATABASE_URL: postgres://payments:payments@db-payments:5432/payments
+    KAFKA_BROKERS: kafka:9092
+    MAX_AMOUNT: "1000"
+
 services:
   #* Kafka
 
@@ -113,6 +125,17 @@ services:
       kafka-init:
         condition: service_completed_successfully
 
+  # Consumidor de orders: lee los eventos de payments y confirma pedidos. Si falla, compose lo reinicia
+  orders-consumer:
+    <<: *orders
+    command: ["consumer"]
+    restart: unless-stopped
+    depends_on:
+      orders-migrate:
+        condition: service_completed_successfully
+      kafka-init:
+        condition: service_completed_successfully
+
   #* Stock
 
   # Base de datos de stock: productos, reservas y outbox. Sin puerto en el host ni volumen con nombre
@@ -169,6 +192,66 @@ services:
     restart: unless-stopped
     depends_on:
       stock-migrate:
+        condition: service_completed_successfully
+      kafka-init:
+        condition: service_completed_successfully
+
+  #* Payments
+
+  # Base de datos de payments: pagos y outbox. Sin puerto en el host ni volumen con nombre
+  db-payments:
+    image: postgres:18
+    environment:
+      POSTGRES_USER: payments
+      POSTGRES_PASSWORD: payments
+      POSTGRES_DB: payments
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U payments -d payments"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # Migraciones de payments: aplica con goose las pendientes antes que los demás procesos, y termina
+  payments-migrate:
+    <<: *payments
+    command: ["migrate"]
+    depends_on:
+      db-payments:
+        condition: service_healthy
+
+  # API de payments en el puerto 8003: arranca con las migraciones aplicadas y está sana cuando /health responde 200
+  payments-api:
+    <<: *payments
+    command: ["api"]
+    ports:
+      - "8003:8000"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8000/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    depends_on:
+      payments-migrate:
+        condition: service_completed_successfully
+
+  # Productor de payments: publica en Kafka los eventos de la outbox de payments. Misma imagen que la api de payments
+  payments-producer:
+    <<: *payments
+    command: ["producer"]
+    restart: unless-stopped
+    depends_on:
+      payments-migrate:
+        condition: service_completed_successfully
+      kafka-init:
+        condition: service_completed_successfully
+
+  # Consumidor de payments: lee los eventos de stock y cobra los pedidos reservados. Si falla, compose lo reinicia
+  payments-consumer:
+    <<: *payments
+    command: ["consumer"]
+    restart: unless-stopped
+    depends_on:
+      payments-migrate:
         condition: service_completed_successfully
       kafka-init:
         condition: service_completed_successfully

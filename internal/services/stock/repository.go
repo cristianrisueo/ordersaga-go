@@ -35,7 +35,7 @@ func (r *Repository) getProduct(ctx context.Context, id string) (Product, error)
 		WHERE id = $1`, id,
 	).Scan(&product.ID, &product.Available)
 
-	// Devuelve errores en caso de que el producto no exista o se de otro
+	// Devuelve errores en caso de que el producto no exista o se dé otro
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Product{}, ErrNotFound
 	}

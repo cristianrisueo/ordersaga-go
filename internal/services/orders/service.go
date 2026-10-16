@@ -1,4 +1,4 @@
-// Reglas de negocio de orders: crear un pedido junto a su evento y leer un pedido
+// Reglas de negocio de orders: crear un pedido junto a su evento, leer un pedido y confirmarlo
 
 package orders
 
@@ -71,4 +71,15 @@ func (s *Service) CreateOrder(ctx context.Context, in CreateOrderInput) (Order, 
 func (s *Service) GetOrder(ctx context.Context, id uuid.UUID) (Order, error) {
 	// Devuelve el pedido leído del repositorio
 	return s.repo.getOrder(ctx, id)
+}
+
+// ConfirmOrder pasa el pedido a confirmed si sigue en pending; no publica ningún evento porque nadie lo escucharía.
+func (s *Service) ConfirmOrder(ctx context.Context, event saga.Event) error {
+	// Confirma el pedido con un UPDATE condicional, que ya es atómico y no necesita transacción
+	if err := s.repo.updateStatusIfPending(ctx, event.OrderID, StatusConfirmed); err != nil {
+		return fmt.Errorf("confirm order: %w", err)
+	}
+
+	// Devuelve nil con el pedido confirmado o ya en otro estado
+	return nil
 }

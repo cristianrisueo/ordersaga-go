@@ -4,7 +4,6 @@ package stock
 
 import (
 	"errors"
-	"time"
 
 	"github.com/google/uuid"
 )
@@ -31,5 +30,4 @@ type Reservation struct {
 	ProductID string    // ProductID es el producto reservado.
 	Quantity  int       // Quantity es el número de unidades reservadas.
 	Status    string    // Status es uno de los estados de la reserva.
-	CreatedAt time.Time // CreatedAt es el momento en que se guardó la reserva.
 }

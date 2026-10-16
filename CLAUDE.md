@@ -58,12 +58,14 @@ sin preguntar.
 
 ## Transacciones y SQL
 
-- El servicio abre la transacción con `pgx.BeginFunc` y decide qué va dentro. Los métodos de escritura del
-  repositorio reciben `pgx.Tx`; las lecturas usan el pool del repositorio.
+- El servicio abre la transacción con `pgx.BeginFunc` y decide qué va dentro. Los métodos de escritura que forman
+  parte de una transacción reciben `pgx.Tx`. Una escritura suelta de una sola sentencia y sin evento (por ejemplo,
+  un `UPDATE` condicional de estado) ya es atómica y usa el pool del repositorio, igual que las lecturas.
 - El cambio de negocio y su evento en la outbox se guardan siempre en la misma transacción.
 - SQL a mano con placeholders (`$1`), nunca concatenando. Columnas explícitas, nunca `SELECT *`.
-- Idempotencia por clave de negocio: `INSERT ... ON CONFLICT DO NOTHING RETURNING` y `UPDATE` condicionales
-  sobre el estado. Nunca comprobar si algo existe antes de insertarlo.
+- Idempotencia por clave de negocio: `INSERT ... ON CONFLICT DO NOTHING` y `UPDATE` condicionales sobre el
+  estado. Para saber si se ha tocado una fila, `Exec` y `RowsAffected()`; `RETURNING` solo cuando se usan los
+  datos que devuelve. Nunca comprobar si algo existe antes de insertarlo.
 - Contrato de la tabla `outbox` (igual en los tres servicios, la lee `saga.RunProducer` y la crea la primera
   migración de cada servicio): `id UUID PRIMARY KEY DEFAULT uuidv7()`, `event_type TEXT NOT NULL`,
   `payload JSONB NOT NULL`, `created_at TIMESTAMPTZ NOT NULL DEFAULT now()`.
